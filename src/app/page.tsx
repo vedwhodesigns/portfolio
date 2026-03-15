@@ -12,38 +12,11 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-8 bg-transparent relative overflow-hidden">
       
-      {/* Organic Moving Code Background */}
-      <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-        {[...Array(30)].map((_, i) => (
-          <motion.div
-            key={i}
-            className="absolute text-[10px] font-mono whitespace-nowrap text-foreground opacity-30 dark:opacity-20"
-            initial={{ 
-              x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1000) - 200, 
-              y: Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 1000) - 200,
-            }}
-            animate={{ 
-              x: Math.random() * 1200 - 100, 
-              y: Math.random() * 1000 - 100,
-              rotate: [0, 10, -10, 0]
-            }}
-            transition={{ 
-              duration: Math.random() * 20 + 20, 
-              repeat: Infinity, 
-              repeatType: "mirror",
-              ease: "linear"
-            }}
-          >
-            {`const liquidVolume_${i} = physical.transmission * ior.dispersion;`}
-          </motion.div>
-        ))}
-      </div>
-
-      <main className="flex flex-col items-center max-w-2xl w-full z-10">
-        <h1 className="text-4xl font-bold mb-4 text-zinc-900 dark:text-zinc-100">Portfolio 2026</h1>
-        <p className="text-zinc-500 dark:text-zinc-400 mb-20 text-center">
-          Test out the exact Figma Node 30:231 interactions!<br/>
-          (Move your cursor or scroll to see the liquid glass in action)
+      <main className="flex flex-col items-center max-w-2xl w-full z-10 pt-[20vh] drop-shadow-2xl">
+        <h1 className="text-4xl font-bold mb-4 text-white dark:text-zinc-100">Portfolio 2026</h1>
+        <p className="text-white/80 dark:text-zinc-400 mb-20 text-center font-medium">
+          Apple Glass Explicit Properties Applied<br/>
+          (Hover the Nav Bar to see Refraction, Depth, Frost)
         </p>
         
         {/* Demonstrate the Viewer Controls */}

@@ -82,24 +82,26 @@ export function MenuBar({ items, className, onAction, ...props }: MenuBarProps) 
         )}
       >
         {items.map((item, index) => (
-          <button 
+          <motion.button 
             key={index}
             disabled={item.disabled}
+            whileHover={!item.disabled ? { scale: 1.12 } : {}}
+            whileTap={!item.disabled ? { scale: 0.9 } : {}}
             onClick={() => {
               item.onClick?.();
               onAction?.(index);
             }}
-            className="w-10 h-10 px-3 py-1 rounded-full flex justify-center items-center gap-2 hover:bg-[#555]/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-10 h-10 px-3 py-1 rounded-full flex justify-center items-center gap-2 hover:bg-[#777]/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             onMouseEnter={() => setActiveIndex(index)}
             onMouseLeave={() => setActiveIndex(null)}
           >
             <div className="flex justify-center items-center">
-              <div className="w-[18px] h-[18px] flex justify-center items-center overflow-hidden text-white">
+              <div className="w-[18px] h-[18px] flex justify-center items-center overflow-hidden text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.4)]">
                 <item.icon className="w-full h-full" />
               </div>
             </div>
             <span className="sr-only">{item.label}</span>
-          </button>
+          </motion.button>
         ))}
       </div>
     </div>

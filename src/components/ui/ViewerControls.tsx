@@ -83,31 +83,25 @@ export default function ViewerControls({
   ];
 
   return (
-    <div className="flex items-center gap-[8px]">
+    <div className="bg-[rgba(43,43,43,0.64)] backdrop-blur-xl shadow-[15px_23px_35px_0px_rgba(0,0,0,0.49)] flex items-center px-[8px] py-[8px] rounded-[108px] border border-white/10">
       
-      {/* Custom Left Label matching Figma but keeping Liquid OS styling available */}
-      <div className="bg-[rgba(43,43,43,0.64)] backdrop-blur shadow-[15px_23px_35px_0px_rgba(0,0,0,0.49)] flex items-center justify-center rounded-[108px] h-[62px] px-[16px]">
-        <p className="font-['Inter'] font-normal text-[12px] text-center text-white whitespace-nowrap px-2">
-          Page
+      <p className="font-['Inter'] font-normal text-[12px] text-center text-white whitespace-nowrap px-4">
+        Page
+      </p>
+
+      <div className="bg-[#555]/80 backdrop-blur-md rounded-[200px] flex items-center justify-center px-2 py-1 gap-1 border border-white/5">
+        <MenuBar items={leftItems} onAction={(idx) => leftItems[idx].onClick?.()} />
+        <p className="font-['Inter'] font-medium text-[14px] text-center text-white whitespace-nowrap px-2">
+          {currentPage} of {totalPages}
         </p>
+        <MenuBar items={rightItems} onAction={(idx) => rightItems[idx].onClick?.()} />
       </div>
 
-      <div className="flex items-center bg-[rgba(43,43,43,0.64)] backdrop-blur shadow-[15px_23px_35px_0px_rgba(0,0,0,0.49)] rounded-[108px] h-[62px] px-[12px] gap-2">
-          {/* We will map the MenuBar onto our controls */}
-          <MenuBar items={leftItems} onAction={(idx) => leftItems[idx].onClick?.()} />
-          
-          <div className="bg-[#555] rounded-[200px] h-[38px] flex items-center justify-center px-4">
-            <p className="font-['Inter'] font-medium text-[14px] text-center text-white whitespace-nowrap min-w-[60px]">
-              {currentPage} of {totalPages}
-            </p>
-          </div>
+      {/* Divider */}
+      <div className="bg-[#d9d9d9] opacity-30 h-[22px] w-px mx-3" />
 
-          <MenuBar items={rightItems} onAction={(idx) => rightItems[idx].onClick?.()} />
-
-          {/* Divider */}
-          <div className="bg-[#d9d9d9] opacity-30 h-[22px] w-px mx-2" />
-
-          <MenuBar items={actionItems} onAction={(idx) => actionItems[idx].onClick?.()} />
+      <div className="bg-[#515151]/80 backdrop-blur-md rounded-[30px] flex items-center justify-center px-2 py-1 border border-white/5">
+        <MenuBar items={actionItems} onAction={(idx) => actionItems[idx].onClick?.()} />
       </div>
 
     </div>

@@ -1,24 +1,21 @@
 "use client";
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { animate, motion, useMotionValue, useSpring } from 'framer-motion';
 import { useOSStore } from '@/store/useOSStore';
 
-// ── Sizes ─────────────────────────────────────────────────
-
+// ── Config ────────────────────────────────────────────────
 const BASE_SIZE = 52;
-const MAX_SIZE  = 80;
+const MAX_EXTRA = 40; // added on top of BASE_SIZE at cursor center
 
-function getMagnifiedSize(i: number, hovered: number | null): number {
-  if (hovered === null) return BASE_SIZE;
-  const dist = Math.abs(i - hovered);
-  if (dist === 0) return MAX_SIZE;
-  if (dist === 1) return 66;
-  if (dist === 2) return 57;
-  return BASE_SIZE;
+/** cos^12 falloff — matches react-spring/macos-dock reference exactly */
+function magnifiedSize(mouseX: number, elCenterX: number, dockWidth: number): number {
+  const ratio = (mouseX - elCenterX) / dockWidth;
+  const extra = MAX_EXTRA * Math.cos((ratio * Math.PI) / 2) ** 12;
+  return BASE_SIZE + extra;
 }
 
-// ── Dock Icon SVGs ────────────────────────────────────────
-// Placeholder SVGs — user will replace with real icon images
+// ── Icon SVGs ─────────────────────────────────────────────
 
 function FinderDockIcon() {
   return (
@@ -82,37 +79,59 @@ function GitHubDockIcon() {
 function TrashDockIcon({ hasItems }: { hasItems?: boolean }) {
   return (
     <svg width="100%" height="100%" viewBox="0 0 52 52" fill="none">
-      {/* Can body */}
       <path d="M12 20 L14 46 Q14 48 16 48 L36 48 Q38 48 38 46 L40 20 Z" fill={hasItems ? '#c8c0b0' : '#d8d0c0'} stroke="#a0988a" strokeWidth="0.8"/>
-      {/* Horizontal lines */}
       {hasItems && <>
         <line x1="20" y1="28" x2="20" y2="44" stroke="#a0988a" strokeWidth="1.2" strokeLinecap="round"/>
         <line x1="26" y1="26" x2="26" y2="44" stroke="#a0988a" strokeWidth="1.2" strokeLinecap="round"/>
         <line x1="32" y1="28" x2="32" y2="44" stroke="#a0988a" strokeWidth="1.2" strokeLinecap="round"/>
       </>}
-      {/* Lid */}
       <rect x="10" y="16" width="32" height="4" rx="2" fill="#b8b0a0" stroke="#908880" strokeWidth="0.8"/>
-      {/* Handle on lid */}
       <rect x="21" y="12" width="10" height="5" rx="2" fill="#b8b0a0" stroke="#908880" strokeWidth="0.8"/>
     </svg>
   );
 }
 
-// ── Dock Item ─────────────────────────────────────────────
+// ── DockCard — one icon with its own spring ───────────────
 
-interface DockItemProps {
-  id: string;
+interface DockCardProps {
   label: string;
   icon: React.ReactNode;
-  size: number;
   isActive: boolean;
-  onMouseEnter: () => void;
-  onMouseLeave: () => void;
+  hovered: boolean;
+  mouseX: number;
+  dockWidth: number;
   onClick: () => void;
 }
 
-function DockItem({ label, icon, size, isActive, onMouseEnter, onMouseLeave, onClick }: DockItemProps) {
+function DockCard({ label, icon, isActive, hovered, mouseX, dockWidth, onClick }: DockCardProps) {
+  const cardRef = useRef<HTMLButtonElement>(null!);
+  const [centerX, setCenterX] = useState(0);
   const [bouncing, setBouncing] = useState(false);
+
+  // Spring for smooth size transitions (low mass = snappy, matches react-spring config)
+  const size = useSpring(BASE_SIZE, { mass: 0.1, stiffness: 320, damping: 20 });
+
+  // Update centerX on resize
+  useEffect(() => {
+    const update = () => {
+      if (cardRef.current) {
+        const rect = cardRef.current.getBoundingClientRect();
+        setCenterX(rect.left + BASE_SIZE / 2);
+      }
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  // Drive the spring from mouse position
+  useEffect(() => {
+    if (hovered && dockWidth > 0) {
+      size.set(magnifiedSize(mouseX, centerX, dockWidth));
+    } else {
+      size.set(BASE_SIZE);
+    }
+  }, [hovered, mouseX, centerX, dockWidth, size]);
 
   const handleClick = () => {
     setBouncing(true);
@@ -121,32 +140,41 @@ function DockItem({ label, icon, size, isActive, onMouseEnter, onMouseLeave, onC
   };
 
   return (
-    <div
-      className="dock-item"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
+    <div className="dock-item">
       <span className="dock-item-label">{label}</span>
-      <div
+      <motion.button
+        ref={cardRef}
         className={`dock-item-icon-wrap ${bouncing ? 'dock-bouncing' : ''}`}
-        style={{ width: size, height: size }}
+        style={{ width: size, height: size, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
         onClick={handleClick}
       >
         {icon}
-      </div>
+      </motion.button>
       {isActive ? <div className="dock-active-dot" /> : <div style={{ height: 9 }} />}
     </div>
   );
 }
 
-// ── Dock ─────────────────────────────────────────────────
+// ── Dock ──────────────────────────────────────────────────
 
 export default function Dock() {
   const { openWindow, windows, restoreWindow } = useOSStore();
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [hovered, setHovered] = useState(false);
+  const [mouseX, setMouseX] = useState(0);
+  const [dockWidth, setDockWidth] = useState(0);
 
-  const isOpen = useCallback((id: string) => windows.some(w => w.id === id && !w.isMinimized), [windows]);
+  const isOpen    = useCallback((id: string) => windows.some(w => w.id === id && !w.isMinimized), [windows]);
   const hasWindow = useCallback((id: string) => windows.some(w => w.id === id), [windows]);
+
+  useEffect(() => {
+    const update = () => {
+      if (dockRef.current) setDockWidth(dockRef.current.clientWidth);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   const openFinder = (view: string, title: string) => {
     const id = `finder-${view}`;
@@ -159,108 +187,57 @@ export default function Dock() {
     }
   };
 
-  // Minimized windows appear in dock
-  const minimizedWindows = windows.filter(w => w.isMinimized);
-
-  interface DockEntry {
-    id: string;
-    label: string;
-    icon: React.ReactNode;
-    action: () => void;
-  }
+  interface DockEntry { id: string; label: string; icon: React.ReactNode; action: () => void; }
 
   const dockItems: DockEntry[] = [
-    {
-      id: 'finder-desktop',
-      label: 'Finder',
-      icon: <FinderDockIcon />,
-      action: () => openFinder('desktop', 'Macintosh HD'),
-    },
-    {
-      id: 'about',
-      label: 'About Me',
-      icon: <AboutDockIcon />,
-      action: () => openWindow({ id: 'about', type: 'about', title: 'About Vedant', x: 220, y: 100, width: 500, height: 380 }),
-    },
-    {
-      id: 'finder-applications',
-      label: 'Projects',
-      icon: <ProjectsDockIcon />,
-      action: () => openFinder('applications', 'Applications'),
-    },
-    {
-      id: 'contact',
-      label: 'Contact',
-      icon: <ContactDockIcon />,
-      action: () => openWindow({ id: 'contact', type: 'about', title: 'Contact', x: 260, y: 120, width: 480, height: 340 }),
-    },
-    {
-      id: 'github',
-      label: 'GitHub',
-      icon: <GitHubDockIcon />,
-      action: () => window.open('https://github.com/vedwhodesigns', '_blank'),
-    },
+    { id: 'finder-desktop',      label: 'Finder',    icon: <FinderDockIcon />,   action: () => openFinder('desktop', 'Macintosh HD') },
+    { id: 'about',               label: 'About Me',  icon: <AboutDockIcon />,    action: () => openWindow({ id: 'about', type: 'about', title: 'About Vedant', x: 220, y: 100, width: 500, height: 380 }) },
+    { id: 'finder-applications', label: 'Projects',  icon: <ProjectsDockIcon />, action: () => openFinder('applications', 'Applications') },
+    { id: 'contact',             label: 'Contact',   icon: <ContactDockIcon />,  action: () => openWindow({ id: 'contact', type: 'about', title: 'Contact', x: 260, y: 120, width: 480, height: 340 }) },
+    { id: 'github',              label: 'GitHub',    icon: <GitHubDockIcon />,   action: () => window.open('https://github.com/vedwhodesigns', '_blank') },
   ];
 
-  // Minimized window entries
-  const minimizedEntries: DockEntry[] = minimizedWindows.map(w => ({
-    id: w.id,
-    label: w.title,
-    icon: (
-      <div style={{
-        width: '100%', height: '100%', background: 'linear-gradient(135deg,#e0e0e0,#c0c0c0)',
-        borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '24px', border: '1px solid rgba(0,0,0,0.1)',
-      }}>
-        {w.type === 'finder' ? '📁' : '🖼️'}
-      </div>
-    ),
-    action: () => restoreWindow(w.id),
-  }));
+  const minimizedEntries: DockEntry[] = windows
+    .filter(w => w.isMinimized)
+    .map(w => ({
+      id: w.id, label: w.title,
+      icon: (
+        <div style={{ width: '100%', height: '100%', background: 'linear-gradient(135deg,#e0e0e0,#c0c0c0)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', border: '1px solid rgba(0,0,0,0.1)' }}>
+          {w.type === 'finder' ? '📁' : '🖼️'}
+        </div>
+      ),
+      action: () => restoreWindow(w.id),
+    }));
 
-  // Trash entry
-  const trashEntry: DockEntry = {
-    id: 'trash',
-    label: 'Trash',
-    icon: <TrashDockIcon hasItems={false} />,
-    action: () => { /* easter egg — could show alert */ },
-  };
-
-  // All entries (including separator logic)
-  const allEntries = [...dockItems, ...minimizedEntries];
-  const totalCount = allEntries.length + 1 /* separator */ + 1 /* trash */;
+  const allEntries: DockEntry[] = [
+    ...dockItems,
+    ...minimizedEntries,
+    { id: 'trash', label: 'Trash', icon: <TrashDockIcon hasItems={false} />, action: () => {} },
+  ];
 
   return (
-    <div className="aqua-dock">
-      {/* App icons */}
+    <div
+      className="aqua-dock"
+      ref={dockRef}
+      onMouseMove={e => { setMouseX(e.clientX); }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       {allEntries.map((item, i) => (
-        <DockItem
-          key={item.id}
-          id={item.id}
-          label={item.label}
-          icon={item.icon}
-          size={getMagnifiedSize(i, hoveredIdx)}
-          isActive={isOpen(item.id)}
-          onMouseEnter={() => setHoveredIdx(i)}
-          onMouseLeave={() => setHoveredIdx(null)}
-          onClick={item.action}
-        />
+        <React.Fragment key={item.id}>
+          {/* Separator before trash */}
+          {i === allEntries.length - 1 && <div className="dock-separator" />}
+          <DockCard
+            label={item.label}
+            icon={item.icon}
+            isActive={isOpen(item.id)}
+            hovered={hovered}
+            mouseX={mouseX}
+            dockWidth={dockWidth}
+            onClick={item.action}
+          />
+        </React.Fragment>
       ))}
-
-      {/* Separator before trash */}
-      <div className="dock-separator" />
-
-      {/* Trash */}
-      <DockItem
-        id="trash"
-        label={trashEntry.label}
-        icon={trashEntry.icon}
-        size={getMagnifiedSize(allEntries.length + 1, hoveredIdx)}
-        isActive={false}
-        onMouseEnter={() => setHoveredIdx(allEntries.length + 1)}
-        onMouseLeave={() => setHoveredIdx(null)}
-        onClick={trashEntry.action}
-      />
     </div>
   );
 }

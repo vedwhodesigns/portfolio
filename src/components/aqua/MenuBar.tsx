@@ -33,6 +33,313 @@ function AquaClock() {
   );
 }
 
+// ── Weather Applet ─────────────────────────────────────────
+
+interface WeatherData {
+  temp: number;
+  code: number;
+}
+
+function getWeatherIcon(code: number | undefined): string {
+  if (code === undefined) return '☼';
+  if (code === 0) return '☼';
+  if (code <= 3) return '⛅';
+  if (code <= 48) return '☁';
+  if (code <= 67) return '☂';
+  if (code <= 77) return '❄';
+  if (code <= 82) return '🌦';
+  return '⛈';
+}
+
+function WeatherApplet() {
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setLoading(false);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          const res = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${latitude.toFixed(2)}&longitude=${longitude.toFixed(2)}&current=temperature_2m,weather_code`
+          );
+          const data = await res.json();
+          setWeather({
+            temp: Math.round(data.current.temperature_2m),
+            code: data.current.weather_code,
+          });
+        } catch {
+          // silently fail — no weather data shown
+        } finally {
+          setLoading(false);
+        }
+      },
+      () => setLoading(false),
+      { timeout: 8000 }
+    );
+  }, []);
+
+  if (loading || !weather) {
+    return (
+      <span className="menubar-item" style={{ cursor: 'default', fontSize: 11, opacity: 0.6 }}>
+        ☼ --°C
+      </span>
+    );
+  }
+
+  return (
+    <span className="menubar-item" style={{ cursor: 'default', fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>
+      {getWeatherIcon(weather.code)} {weather.temp}°C
+    </span>
+  );
+}
+
+// ── Music Applet ───────────────────────────────────────────
+
+function MusicApplet() {
+  const {
+    tracks, currentTrackIndex, isPlaying, volume,
+    setIsPlaying, nextTrack, prevTrack, currentTime, duration,
+    setCurrentTime, setDuration,
+  } = useOSStore();
+
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const track = tracks[currentTrackIndex];
+
+  // Create / manage audio element
+  useEffect(() => {
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+      audioRef.current.preload = 'metadata';
+    }
+    const audio = audioRef.current;
+
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onDuration = () => setDuration(audio.duration);
+    const onEnded = () => nextTrack();
+
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('loadedmetadata', onDuration);
+    audio.addEventListener('ended', onEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('loadedmetadata', onDuration);
+      audio.removeEventListener('ended', onEnded);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sync track URL
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !track?.url) return;
+    const playing = !audio.paused;
+    audio.src = track.url;
+    audio.load();
+    if (playing || isPlaying) {
+      audio.play().catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentTrackIndex, track?.url]);
+
+  // Sync play/pause
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.play().catch(() => setIsPlaying(false));
+    } else {
+      audio.pause();
+    }
+  }, [isPlaying, setIsPlaying]);
+
+  // Sync volume
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.volume = volume;
+  }, [volume]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const togglePlay = () => setIsPlaying(!isPlaying);
+
+  const fmt = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60).toString().padStart(2, '0');
+    return `${m}:${sec}`;
+  };
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const t = parseFloat(e.target.value);
+    setCurrentTime(t);
+    if (audioRef.current) audioRef.current.currentTime = t;
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        className={`menubar-item ${open ? 'open' : ''}`}
+        style={{ fontSize: 12, padding: '0 6px' }}
+        onMouseDown={(e) => { e.preventDefault(); setOpen(v => !v); }}
+        title={isPlaying ? `Now playing: ${track?.title}` : 'Music'}
+      >
+        {isPlaying ? '♫' : '♩'}
+      </button>
+
+      {open && (
+        <div
+          className="aqua-dropdown"
+          style={{ right: 0, top: '100%', width: 220, padding: '10px 12px', boxSizing: 'border-box' }}
+        >
+          {/* Track info */}
+          <div style={{ marginBottom: 8, textAlign: 'center' }}>
+            <div style={{
+              fontSize: 11,
+              fontWeight: 600,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}>
+              {track?.title ?? 'No Track'}
+            </div>
+            <div style={{ fontSize: 10, opacity: 0.6, marginTop: 1 }}>
+              {track?.artist ?? ''}
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div style={{ marginBottom: 6 }}>
+            <input
+              type="range"
+              min={0}
+              max={duration || 1}
+              step={0.1}
+              value={currentTime}
+              onChange={handleSeek}
+              style={{ width: '100%', cursor: 'pointer', accentColor: '#1a6ccf' }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9, opacity: 0.55, marginTop: 1 }}>
+              <span>{fmt(currentTime)}</span>
+              <span>{fmt(duration)}</span>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10 }}>
+            <button
+              className="aqua-menu-item"
+              onClick={prevTrack}
+              style={{ padding: '4px 8px', fontSize: 14, borderRadius: 4 }}
+              title="Previous"
+            >⏮</button>
+            <button
+              className="aqua-menu-item"
+              onClick={togglePlay}
+              style={{ padding: '4px 12px', fontSize: 16, borderRadius: 4, fontWeight: 600 }}
+              title={isPlaying ? 'Pause' : 'Play'}
+            >
+              {isPlaying ? '⏸' : '▶'}
+            </button>
+            <button
+              className="aqua-menu-item"
+              onClick={nextTrack}
+              style={{ padding: '4px 8px', fontSize: 14, borderRadius: 4 }}
+              title="Next"
+            >⏭</button>
+          </div>
+
+          {/* Track list */}
+          <div style={{ marginTop: 8, borderTop: '1px solid rgba(0,0,0,0.1)', paddingTop: 6 }}>
+            {tracks.map((t, i) => (
+              <button
+                key={t.id}
+                className="aqua-menu-item"
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  fontSize: 10,
+                  padding: '3px 6px',
+                  fontWeight: i === currentTrackIndex ? 600 : 400,
+                  background: i === currentTrackIndex ? 'rgba(26,108,207,0.12)' : undefined,
+                }}
+                onClick={() => {
+                  useOSStore.setState({ currentTrackIndex: i, currentTime: 0 });
+                  setIsPlaying(true);
+                }}
+              >
+                {i === currentTrackIndex && isPlaying ? '▶ ' : '  '}{t.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Volume Applet ─────────────────────────────────────────
+
+function VolumeApplet() {
+  const { volume, setVolume } = useOSStore();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const icon = volume === 0 ? '🔇' : volume < 0.4 ? '🔉' : '🔊';
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        className={`menubar-item ${open ? 'open' : ''}`}
+        style={{ fontSize: 12, padding: '0 6px' }}
+        onMouseDown={(e) => { e.preventDefault(); setOpen(v => !v); }}
+        title="Volume"
+      >
+        {icon}
+      </button>
+      {open && (
+        <div className="aqua-dropdown" style={{ right: 0, top: '100%', width: 48, padding: '10px 0' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 10 }}>🔊</span>
+            <input
+              type="range" min={0} max={1} step={0.02}
+              value={volume}
+              onChange={e => setVolume(parseFloat(e.target.value))}
+              style={{ writingMode: 'vertical-lr', direction: 'rtl', height: 70, cursor: 'default' }}
+            />
+            <span style={{ fontSize: 10 }}>🔇</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Dropdown Menu ─────────────────────────────────────────
 
 interface AquaMenuProps {
@@ -93,52 +400,6 @@ function AquaMenu({ label, bold, items, isOpen, onOpen, onClose, alignRight }: A
               </button>
             );
           })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Volume Applet ─────────────────────────────────────────
-
-function VolumeApplet() {
-  const { volume, setVolume } = useOSStore();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const icon = volume === 0 ? '🔇' : volume < 0.4 ? '🔉' : '🔊';
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        className={`menubar-item ${open ? 'open' : ''}`}
-        style={{ fontSize: 12, padding: '0 6px' }}
-        onMouseDown={(e) => { e.preventDefault(); setOpen(v => !v); }}
-        title="Volume"
-      >
-        {icon}
-      </button>
-      {open && (
-        <div className="aqua-dropdown" style={{ right: 0, top: '100%', width: 48, padding: '10px 0' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 10 }}>🔊</span>
-            <input
-              type="range" min={0} max={1} step={0.02}
-              value={volume}
-              onChange={e => setVolume(parseFloat(e.target.value))}
-              style={{ writingMode: 'vertical-lr', direction: 'rtl', height: 70, cursor: 'default' }}
-            />
-            <span style={{ fontSize: 10 }}>🔇</span>
-          </div>
         </div>
       )}
     </div>
@@ -348,8 +609,10 @@ export default function MenuBar() {
         ))}
       </div>
 
-      {/* Right — system tray */}
+      {/* Right — system tray: Weather | Music | Volume | Clock */}
       <div className="menubar-right">
+        <WeatherApplet />
+        <MusicApplet />
         <VolumeApplet />
         <AquaClock />
       </div>

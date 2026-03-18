@@ -182,7 +182,7 @@ export const TRACKS: Track[] = [
     title: 'Midnight Drive',
     artist: 'Ambient Studio',
     duration: 214,
-    url: '',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
     albumArt: undefined,
   },
   {
@@ -190,7 +190,7 @@ export const TRACKS: Track[] = [
     title: 'Pixel Dreams',
     artist: 'Synth Collective',
     duration: 187,
-    url: '',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
     albumArt: undefined,
   },
   {
@@ -198,7 +198,7 @@ export const TRACKS: Track[] = [
     title: 'Chromatic',
     artist: 'Lo-Fi Sessions',
     duration: 243,
-    url: '',
+    url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
     albumArt: undefined,
   },
 ]

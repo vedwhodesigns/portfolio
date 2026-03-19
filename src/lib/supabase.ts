@@ -1,14 +1,39 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+// Lazy singletons — only instantiated on first access so the build
+// doesn't throw when env vars are absent during static analysis.
+let _supabase: SupabaseClient | null = null
+let _supabaseAdmin: SupabaseClient | null = null
 
-// Browser client — safe to use in components
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+function makeProxy(getter: () => SupabaseClient): SupabaseClient {
+  return new Proxy({} as SupabaseClient, {
+    get: (_t, prop) => {
+      const client = getter()
+      const val = client[prop as keyof SupabaseClient]
+      return typeof val === 'function' ? (val as Function).bind(client) : val
+    },
+  })
+}
 
-// Server client — uses service role key, only for API routes
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+// Browser client
+export const supabase: SupabaseClient = makeProxy(() => {
+  if (!_supabase) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+    _supabase = createClient(url, key)
+  }
+  return _supabase
+})
+
+// Server/admin client (service role)
+export const supabaseAdmin: SupabaseClient = makeProxy(() => {
+  if (!_supabaseAdmin) {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
+    _supabaseAdmin = createClient(url, key)
+  }
+  return _supabaseAdmin
+})
 
 // ── Database types ─────────────────────────────────────────
 
